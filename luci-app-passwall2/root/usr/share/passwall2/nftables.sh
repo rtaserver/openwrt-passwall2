@@ -217,8 +217,8 @@ get_wan6_ip() {
 load_acl() {
 	[ "$ENABLED_ACLS" == 1 ] && {
 		acl_app
-		echolog "Access control: "
-		for sid in $(ls -F ${TMP_ACL_PATH} | grep '/$' | awk -F '/' '{print $1}'); do
+		echolog "Access control："
+		for sid in $(ls -F ${TMP_ACL_PATH} | grep '/$' | awk -F '/' '{print $1}' | grep -v 'default'); do
 			eval $(uci -q show "${CONFIG}.${sid}" | cut -d'.' -sf 3-)
 
 			tcp_no_redir_ports=${tcp_no_redir_ports:-default}

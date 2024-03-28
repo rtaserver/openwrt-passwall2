@@ -190,8 +190,8 @@ get_wan6_ip() {
 load_acl() {
 	[ "$ENABLED_ACLS" == 1 ] && {
 		acl_app
-		echolog "Access control: "
-		for sid in $(ls -F ${TMP_ACL_PATH} | grep '/$' | awk -F '/' '{print $1}'); do
+		echolog "Access control："
+		for sid in $(ls -F ${TMP_ACL_PATH} | grep '/$' | awk -F '/' '{print $1}' | grep -v 'default'); do
 			eval $(uci -q show "${CONFIG}.${sid}" | cut -d'.' -sf 3-)
 
 			tcp_no_redir_ports=${tcp_no_redir_ports:-default}
@@ -250,11 +250,11 @@ load_acl() {
 					if [ "$tcp_no_redir_ports" != "1:65535" ]; then
 						$ip6t_m -A PSW2 $(comment "$remarks") ${_ipt_source} -p tcp -m multiport --dport $tcp_no_redir_ports -j RETURN 2>/dev/null
 						$ipt_tmp -A PSW2 $(comment "$remarks") ${_ipt_source} -p tcp -m multiport --dport $tcp_no_redir_ports -j RETURN
-						echolog "  - ${msg}不代理 TCP 端口[${tcp_no_redir_ports}]"
+						echolog "  - ${msg}Not an agent TCP port[${tcp_no_redir_ports}]"
 					else
 						#结束时会return，无需加多余的规则。
 						tcp_proxy_mode="disable"
-						echolog "  - ${msg}不代理所有 TCP"
+						echolog "  - ${msg}Not representing all TCP"
 					fi
 				}
 				
@@ -266,13 +266,13 @@ load_acl() {
 					else
 						#结束时会return，无需加多余的规则。
 						udp_proxy_mode="disable"
-						echolog "  - ${msg}不代理所有 UDP"
+						echolog "  - ${msg}Not representing all UDP"
 					fi
 				}
 
 				[ "$tcp_proxy_mode" != "disable" ] && [ -n "$redir_port" ] && {
 					[ -s "${TMP_ACL_PATH}/${sid}/var_redirect_dns_port" ] && $ipt_n -A PSW2_REDIRECT $(comment "$remarks") -p udp ${_ipt_source} --dport 53 -j REDIRECT --to-ports $(cat ${TMP_ACL_PATH}/${sid}/var_redirect_dns_port)
-					msg2="${msg}使用 TCP 节点[$node_remark]"
+					msg2="${msg}use TCP node[$node_remark]"
 					if [ -n "${is_tproxy}" ]; then
 						msg2="${msg2}(TPROXY:${redir_port})"
 					else
@@ -311,7 +311,7 @@ load_acl() {
 				$ip6t_m -A PSW2 $(comment "$remarks") ${_ipt_source} -p tcp -j RETURN 2>/dev/null
 
 				[ "$udp_proxy_mode" != "disable" ] && [ -n "$redir_port" ] && {
-					msg2="${msg}使用 UDP 节点[$node_remark](TPROXY:${redir_port})"
+					msg2="${msg}use UDP node[$node_remark](TPROXY:${redir_port})"
 
 					[ "${write_ipset_direct}" = "1" ] && $ipt_m -A PSW2 $(comment "$remarks") -p udp ${_ipt_source} $(dst $ipset_whitelist) ! -d $FAKE_IP -j RETURN
 					$ipt_m -A PSW2 $(comment "$remarks") -p udp ${_ipt_source} -d $FAKE_IP -j PSW2_RULE

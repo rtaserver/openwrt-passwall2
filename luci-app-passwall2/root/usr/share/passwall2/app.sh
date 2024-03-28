@@ -9,7 +9,6 @@ TMP_PATH=/tmp/etc/$CONFIG
 TMP_BIN_PATH=$TMP_PATH/bin
 TMP_SCRIPT_FUNC_PATH=$TMP_PATH/script_func
 TMP_ID_PATH=$TMP_PATH/id
-TMP_PORT_PATH=$TMP_PATH/port
 TMP_ROUTE_PATH=$TMP_PATH/route
 TMP_ACL_PATH=$TMP_PATH/acl
 TMP_IFACE_PATH=$TMP_PATH/iface
@@ -544,8 +543,13 @@ run_socks() {
 			local _extra_param="-local_http_port $http_port"
 		}
 		[ -n "$relay_port" ] && _extra_param="${_extra_param} -server_host $server_host -server_port $port"
+		[ "${log_file}" != "/dev/null" ] && {
+			local loglevel=$(config_t_get global loglevel "warn")
+			[ "$loglevel" = "warning" ] && loglevel="warn"
+			_extra_param="${_extra_param} -log 1 -loglevel $loglevel -logfile $log_file"
+		}
 		lua $UTIL_SINGBOX gen_config -flag SOCKS_$flag -node $node -local_socks_port $socks_port ${_extra_param} > $config_file
-		ln_run "$(first_type $(config_t_get global_app singbox_file) sing-box)" "sing-box" $log_file run -c "$config_file"
+		ln_run "$(first_type $(config_t_get global_app singbox_file) sing-box)" "sing-box" /dev/null run -c "$config_file"
 	;;
 	xray)
 		[ "$http_port" != "0" ] && {
@@ -560,21 +564,6 @@ run_socks() {
 	naiveproxy)
 		lua $UTIL_NAIVE gen_config -node $node -run_type socks -local_addr $bind -local_port $socks_port -server_host $server_host -server_port $port > $config_file
 		ln_run "$(first_type naive)" naive $log_file "$config_file"
-	;;
-	brook)
-		local protocol=$(config_n_get $node protocol client)
-		local prefix=""
-		[ "$protocol" == "wsclient" ] && {
-			prefix="ws://"
-			local brook_tls=$(config_n_get $node brook_tls 0)
-			[ "$brook_tls" == "1" ] && {
-				prefix="wss://"
-				protocol="wssclient"
-			}
-			local ws_path=$(config_n_get $node ws_path "/ws")
-		}
-		server_host=${prefix}${server_host}
-		ln_run "$(first_type $(config_t_get global_app brook_file) brook)" "brook_SOCKS_${flag}" $log_file "$protocol" --socks5 "$bind:$socks_port" -s "${server_host}:${port}${ws_path}" -p "$(config_n_get $node password)"
 	;;
 	ssr)
 		lua $UTIL_SS gen_config -node $node -local_addr "0.0.0.0" -local_port $socks_port -server_host $server_host -server_port $port > $config_file
@@ -641,10 +630,12 @@ socks_node_switch() {
 		local port=$(config_n_get $flag port)
 		local config_file="SOCKS_${flag}.json"
 		local log_file="SOCKS_${flag}.log"
+		local log=$(config_n_get $flag log 1)
+		[ "$log" == "0" ] && log_file=""
 		local http_port=$(config_n_get $flag http_port 0)
 		local http_config_file="HTTP2SOCKS_${flag}.json"
 		LOG_FILE="/dev/null"
-		run_socks flag=$flag node=$new_node bind=0.0.0.0 socks_port=$port config_file=$config_file http_port=$http_port http_config_file=$http_config_file
+		run_socks flag=$flag node=$new_node bind=0.0.0.0 socks_port=$port config_file=$config_file http_port=$http_port http_config_file=$http_config_file log_file=$log_file
 		echo $new_node > $TMP_ID_PATH/socks_${flag}
 	}
 }
@@ -653,14 +644,8 @@ run_global() {
 	[ "$NODE" = "nil" ] && return 1
 	TYPE=$(echo $(config_n_get $NODE type nil) | tr 'A-Z' 'a-z')
 	[ "$TYPE" = "nil" ] && return 1
-	echo $REDIR_PORT > $TMP_PORT_PATH/global
-	echo $NODE > $TMP_ID_PATH/global
-	[ "$(config_n_get $NODE protocol nil)" = "_shunt" ] && {
-		local default_node=$(config_n_get $NODE default_node nil)
-		local main_node=$(config_n_get $NODE main_node nil)
-		echo $default_node > $TMP_ID_PATH/global_default
-		echo $main_node > $TMP_ID_PATH/global_main
-	}
+	mkdir -p $TMP_ACL_PATH/default
+	echo $NODE > $TMP_ACL_PATH/default/global.id
 
 	if [ $PROXY_IPV6 == "1" ]; then
 		echolog "Open the experimental IPv6 transparent proxy (TProxy), please confirm your node and type support IPv6!"
@@ -701,14 +686,14 @@ run_global() {
 	source $APP_PATH/helper_dnsmasq.sh stretch
 	source $APP_PATH/helper_dnsmasq.sh add TMP_DNSMASQ_PATH=$TMP_DNSMASQ_PATH DNSMASQ_CONF_FILE=/tmp/dnsmasq.d/dnsmasq-passwall2.conf DEFAULT_DNS=$AUTO_DNS LOCAL_DNS=$LOCAL_DNS TUN_DNS=$TUN_DNS NFTFLAG=${nftflag:-0}
 
-	V2RAY_CONFIG=$TMP_PATH/global.json
-	V2RAY_LOG=$TMP_PATH/global.log
+	V2RAY_CONFIG=$TMP_ACL_PATH/default/global.json
+	V2RAY_LOG=$TMP_ACL_PATH/default/global.log
 	[ "$(config_t_get global close_log 1)" = "1" ] && V2RAY_LOG="/dev/null"
 	V2RAY_ARGS="${V2RAY_ARGS} log_file=${V2RAY_LOG} config_file=${V2RAY_CONFIG}"
 
 	node_socks_port=$(config_t_get global node_socks_port 1070)
 	V2RAY_ARGS="${V2RAY_ARGS} socks_port=${node_socks_port}"
-	echo "127.0.0.1:$node_socks_port" > $TMP_PATH/global_SOCKS_server
+	echo "127.0.0.1:$node_socks_port" > $TMP_ACL_PATH/default/SOCKS_server
 
 	node_http_port=$(config_t_get global node_http_port 0)
 	[ "$node_http_port" != "0" ] && V2RAY_ARGS="${V2RAY_ARGS} http_port=${node_http_port}"
@@ -740,9 +725,11 @@ start_socks() {
 				local port=$(config_n_get $id port)
 				local config_file="SOCKS_${id}.json"
 				local log_file="SOCKS_${id}.log"
+				local log=$(config_n_get $id log 1)
+				[ "$log" == "0" ] && log_file=""
 				local http_port=$(config_n_get $id http_port 0)
 				local http_config_file="HTTP2SOCKS_${id}.json"
-				run_socks flag=$id node=$node bind=0.0.0.0 socks_port=$port config_file=$config_file http_port=$http_port http_config_file=$http_config_file
+				run_socks flag=$id node=$node bind=0.0.0.0 socks_port=$port config_file=$config_file http_port=$http_port http_config_file=$http_config_file log_file=$log_file
 				echo $node > $TMP_ID_PATH/socks_${id}
 
 				#自动切换逻辑
@@ -1149,7 +1136,7 @@ SINGBOX_BIN=$(first_type $(config_t_get global_app singbox_file) sing-box)
 
 export V2RAY_LOCATION_ASSET=$(config_t_get global_rules v2ray_location_asset "/usr/share/v2ray/")
 export XRAY_LOCATION_ASSET=$V2RAY_LOCATION_ASSET
-mkdir -p /tmp/etc $TMP_PATH $TMP_BIN_PATH $TMP_SCRIPT_FUNC_PATH $TMP_ID_PATH $TMP_PORT_PATH $TMP_ROUTE_PATH $TMP_ACL_PATH $TMP_IFACE_PATH $TMP_PATH2
+mkdir -p /tmp/etc $TMP_PATH $TMP_BIN_PATH $TMP_SCRIPT_FUNC_PATH $TMP_ID_PATH $TMP_ROUTE_PATH $TMP_ACL_PATH $TMP_IFACE_PATH $TMP_PATH2
 
 arg1=$1
 shift
