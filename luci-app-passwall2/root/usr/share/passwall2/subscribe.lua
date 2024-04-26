@@ -104,7 +104,7 @@ do
 		local node_id = uci:get(appname, szType, option)
 		CONFIG[#CONFIG + 1] = {
 			log = true,
-			remarks = "node",
+			remarks = "节点",
 			currentNode = node_id and uci:get_all(appname, node_id) or nil,
 			set = function(o, server)
 				uci:set(appname, szType, option, server)
@@ -122,7 +122,7 @@ do
 			CONFIG[#CONFIG + 1] = {
 				log = true,
 				id = t[".name"],
-				remarks = "Socks node list[" .. i .. "]",
+				remarks = "Socks节点列表[" .. i .. "]",
 				currentNode = node_id and uci:get_all(appname, node_id) or nil,
 				set = function(o, server)
 					uci:set(appname, t[".name"], option, server)
@@ -144,7 +144,7 @@ do
 			CONFIG[#CONFIG + 1] = {
 				log = true,
 				id = t[".name"],
-				remarks = "HAProxy load balancing node list[" .. i .. "]",
+				remarks = "HAProxy负载均衡节点列表[" .. i .. "]",
 				currentNode = node_id and uci:get_all(appname, node_id) or nil,
 				set = function(o, server)
 					uci:set(appname, t[".name"], option, server)
@@ -166,7 +166,7 @@ do
 			CONFIG[#CONFIG + 1] = {
 				log = true,
 				id = t[".name"],
-				remarks = "access control list[" .. i .. "]",
+				remarks = "访问控制列表[" .. i .. "]",
 				currentNode = node_id and uci:get_all(appname, node_id) or nil,
 				set = function(o, server)
 					uci:set(appname, t[".name"], option, server)
@@ -191,11 +191,11 @@ do
 						end
 						nodes[#nodes + 1] = {
 							log = true,
-							remarks = "Socks[" .. id .. "]List of backup nodes[" .. k .. "]",
+							remarks = "Socks[" .. id .. "]备用节点的列表[" .. k .. "]",
 							currentNode = currentNode,
 							set = function(o, server)
 								for kk, vv in pairs(CONFIG) do
-									if (vv.remarks == id .. "List of backup nodes") then
+									if (vv.remarks == id .. "备用节点的列表") then
 										table.insert(vv.new_nodes, server)
 									end
 								end
@@ -205,12 +205,12 @@ do
 				end
 			end
 			CONFIG[#CONFIG + 1] = {
-				remarks = id .. "List of backup nodes",
+				remarks = id .. "备用节点的列表",
 				nodes = nodes,
 				new_nodes = new_nodes,
 				set = function(o)
 					for kk, vv in pairs(CONFIG) do
-						if (vv.remarks == id .. "List of backup nodes") then
+						if (vv.remarks == id .. "备用节点的列表") then
 							uci:set_list(appname, id, "autoswitch_backup_node", vv.new_nodes)
 						end
 					end
@@ -220,9 +220,8 @@ do
 	end)
 
 	uci:foreach(appname, "nodes", function(node)
+		local node_id = node[".name"]
 		if node.protocol and node.protocol == '_shunt' then
-			local node_id = node[".name"]
-
 			local rules = {}
 			uci:foreach(appname, "shunt_rules", function(e)
 				if e[".name"] and e.remarks then
@@ -231,11 +230,11 @@ do
 			end)
 			table.insert(rules, {
 				[".name"] = "default_node",
-				remarks = "default"
+				remarks = "默认"
 			})
 			table.insert(rules, {
 				[".name"] = "main_node",
-				remarks = "Default prefix"
+				remarks = "默认前置"
 			})
 
 			for k, e in pairs(rules) do
@@ -245,7 +244,7 @@ do
 					CONFIG[#CONFIG + 1] = {
 						log = false,
 						currentNode = _node_id and uci:get_all(appname, _node_id) or nil,
-						remarks = "Diversion" .. e.remarks .. "node",
+						remarks = "分流" .. e.remarks .. "节点",
 						set = function(o, server)
 							if not server then server = "nil" end
 							uci:set(appname, node_id, e[".name"], server)
@@ -256,7 +255,6 @@ do
 				
 			end
 		elseif node.protocol and node.protocol == '_balancing' then
-			local node_id = node[".name"]
 			local nodes = {}
 			local new_nodes = {}
 			if node.balancing_node then
@@ -268,7 +266,7 @@ do
 						remarks = node,
 						set = function(o, server)
 							for kk, vv in pairs(CONFIG) do
-								if (vv.remarks == "Load balancing node list" .. node_id) then
+								if (vv.remarks == "Xray负载均衡节点[" .. node_id .. "]列表") then
 									table.insert(vv.new_nodes, server)
 								end
 							end
@@ -277,13 +275,12 @@ do
 				end
 			end
 			CONFIG[#CONFIG + 1] = {
-				remarks = "Load balancing node list" .. node_id,
+				remarks = "Xray负载均衡节点[" .. node_id .. "]列表",
 				nodes = nodes,
 				new_nodes = new_nodes,
 				set = function(o)
 					for kk, vv in pairs(CONFIG) do
-						if (vv.remarks == "Load balancing node list" .. node_id) then
-							--log("刷新负载均衡节点列表")
+						if (vv.remarks == "Xray负载均衡节点[" .. node_id .. "]列表") then
 							uci:foreach(appname, "nodes", function(node2)
 								if node2[".name"] == node[".name"] then
 									local section = uci:section(appname, "nodes", node_id)
@@ -294,6 +291,42 @@ do
 					end
 				end
 			}
+
+			--后备节点
+			local currentNode = uci:get_all(appname, node_id) or nil
+			if currentNode and currentNode.fallback_node then
+				CONFIG[#CONFIG + 1] = {
+					log = true,
+					id = node_id,
+					remarks = "Xray负载均衡节点[" .. node_id .. "]后备节点",
+					currentNode = uci:get_all(appname, currentNode.fallback_node) or nil,
+					set = function(o, server)
+						uci:set(appname, node_id, "fallback_node", server)
+						o.newNodeId = server
+					end,
+					delete = function(o)
+						uci:delete(appname, node_id, "fallback_node")
+					end
+				}
+			end
+		else
+			--落地节点
+			local currentNode = uci:get_all(appname, node_id) or nil
+			if currentNode and currentNode.to_node then
+				CONFIG[#CONFIG + 1] = {
+					log = true,
+					id = node_id,
+					remarks = "节点[" .. node_id .. "]落地节点",
+					currentNode = uci:get_all(appname, currentNode.to_node) or nil,
+					set = function(o, server)
+						uci:set(appname, node_id, "to_node", server)
+						o.newNodeId = server
+					end,
+					delete = function(o)
+						uci:delete(appname, node_id, "to_node")
+					end
+				}
+			end
 		end
 	end)
 
@@ -881,7 +914,7 @@ local function processData(szType, content, add_mode, add_from)
 			end
 		end
 	else
-		log('Not supported at the moment' .. szType .. "Type of node subscription, skip this node.")
+		log('暂时不支持' .. szType .. "类型的节点订阅，跳过此节点。")
 		return nil
 	end
 	if not result.remarks or result.remarks == "" then
@@ -949,7 +982,7 @@ local function select_node(nodes, config)
 		if config.currentNode[".name"] then
 			for index, node in pairs(nodes) do
 				if node[".name"] == config.currentNode[".name"] then
-					log('renew【' .. config.remarks .. '】Matching node: ' .. node.remarks)
+					log('更新【' .. config.remarks .. '】匹配节点：' .. node.remarks)
 					server = node[".name"]
 					break
 				end
@@ -962,7 +995,7 @@ local function select_node(nodes, config)
 					if node.type and node.remarks and node.address and node.port then
 						if node.type == config.currentNode.type and node.remarks == config.currentNode.remarks and (node.address .. ':' .. node.port == config.currentNode.address .. ':' .. config.currentNode.port) then
 							if config.log == nil or config.log == true then
-								log('renew【' .. config.remarks .. '】The first matching node: ' .. node.remarks)
+								log('更新【' .. config.remarks .. '】第一匹配节点：' .. node.remarks)
 							end
 							server = node[".name"]
 							break
@@ -978,7 +1011,7 @@ local function select_node(nodes, config)
 					if node.type and node.address and node.port then
 						if node.type == config.currentNode.type and (node.address .. ':' .. node.port == config.currentNode.address .. ':' .. config.currentNode.port) then
 							if config.log == nil or config.log == true then
-								log('renew【' .. config.remarks .. '】Second matching node: ' .. node.remarks)
+								log('更新【' .. config.remarks .. '】第二匹配节点：' .. node.remarks)
 							end
 							server = node[".name"]
 							break
@@ -994,7 +1027,7 @@ local function select_node(nodes, config)
 					if node.address and node.port then
 						if node.address .. ':' .. node.port == config.currentNode.address .. ':' .. config.currentNode.port then
 							if config.log == nil or config.log == true then
-								log('renew【' .. config.remarks .. '】Third matching node: ' .. node.remarks)
+								log('更新【' .. config.remarks .. '】第三匹配节点：' .. node.remarks)
 							end
 							server = node[".name"]
 							break
@@ -1010,7 +1043,7 @@ local function select_node(nodes, config)
 					if node.address then
 						if node.address == config.currentNode.address then
 							if config.log == nil or config.log == true then
-								log('renew【' .. config.remarks .. '】Fourth matching node: ' .. node.remarks)
+								log('更新【' .. config.remarks .. '】第四匹配节点：' .. node.remarks)
 							end
 							server = node[".name"]
 							break
@@ -1026,7 +1059,7 @@ local function select_node(nodes, config)
 					if node.remarks then
 						if node.remarks == config.currentNode.remarks then
 							if config.log == nil or config.log == true then
-								log('renew【' .. config.remarks .. '】Fifth matching node: ' .. node.remarks)
+								log('更新【' .. config.remarks .. '】第五匹配节点：' .. node.remarks)
 							end
 							server = node[".name"]
 							break
@@ -1045,7 +1078,7 @@ local function select_node(nodes, config)
 			end
 			if #nodes_table > 0 then
 				if config.log == nil or config.log == true then
-					log('【' .. config.remarks .. '】' .. 'Unable to find the best matching node, it has been replaced by: ' .. nodes_table[1].remarks)
+					log('【' .. config.remarks .. '】' .. '无法找到最匹配的节点，当前已更换为：' .. nodes_table[1].remarks)
 				end
 				server = nodes_table[1][".name"]
 			end
@@ -1060,7 +1093,7 @@ end
 
 local function update_node(manual)
 	if next(nodeResult) == nil then
-		log("Update failed, no node information available")
+		log("更新失败，没有可用的节点信息")
 		return
 	end
 
@@ -1203,10 +1236,10 @@ local function parse_link(raw, add_mode, add_from)
 				list = node_list
 			}
 		end
-		log('Successfully parsed【' .. add_from .. '】Number of nodes: ' .. #node_list)
+		log('成功解析【' .. add_from .. '】节点数量: ' .. #node_list)
 	else
 		if add_mode == "2" then
-			log('Obtained【' .. add_from .. '】The subscription content is empty. It may be that the subscription address is invalid or there is a network problem. Please check it.')
+			log('获取到的【' .. add_from .. '】订阅内容为空，可能是订阅地址失效，或是网络问题，请请检测。')
 		end
 	end
 end
@@ -1271,7 +1304,7 @@ local execute = function()
 				hysteria2_type_default = hysteria2_type
 			end
 			local ua = value.user_agent
-			log('Subscribing:【' .. remark .. '】' .. url)
+			log('正在订阅:【' .. remark .. '】' .. url)
 			local raw = curl(url, "/tmp/" .. cfgid, ua)
 			if raw == 0 then
 				local f = io.open("/tmp/" .. cfgid, "r")
@@ -1296,7 +1329,7 @@ local execute = function()
 
 		if #fail_list > 0 then
 			for index, value in ipairs(fail_list) do
-				log(string.format('【%s】Subscription failed. It may be that the subscription address is invalid or there is a network problem. Please diagnose! ', value.remark))
+				log(string.format('【%s】订阅失败，可能是订阅地址失效，或是网络问题，请诊断！', value.remark))
 			end
 		end
 		update_node(0)
@@ -1309,9 +1342,9 @@ if arg[1] then
 		xpcall(execute, function(e)
 			log(e)
 			log(debug.traceback())
-			log('An error occurred and service is being restored')
+			log('发生错误, 正在恢复服务')
 		end)
-		log('Subscription completed...')
+		log('订阅完毕...')
 	elseif arg[1] == "add" then
 		local f = assert(io.open("/tmp/links.conf", 'r'))
 		local content = f:read('*all')
