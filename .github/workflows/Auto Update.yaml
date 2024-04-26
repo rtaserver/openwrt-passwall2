@@ -1,0 +1,44 @@
+name: Check Passwall Changes
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        ref: dev
+
+    - name: Check for changes in passwall
+      id: passwall_changes
+      run: |
+        git fetch --depth=1 https://github.com/xiaorouji/openwrt-passwall2.git dev
+        git diff --quiet FETCH_HEAD -- luci-app-passwall2
+        echo "::set-output name=changes::$(echo $?)"
+
+    - name: Delete luci-app-passwall2 if changes detected
+      if: steps.passwall_changes.outputs.changes == '1'
+      run: |
+        rm -rf luci-app-passwall2
+
+    - name: Clone passwall repo
+      if: steps.passwall_changes.outputs.changes == '1'
+      run: |
+        git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall2.git
+        mv openwrt-passwall2/luci-app-passwall2 .
+        rm -rf openwrt-passwall2
+
+    - name: Commit changes
+      if: steps.passwall_changes.outputs.changes == '1'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .
+        git commit -m "Update luci-app-passwall2"
+        git push
