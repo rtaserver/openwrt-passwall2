@@ -1,0 +1,39 @@
+name: Check Passwall Changes
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        ref: 'dev'
+
+    - name: Delete luci-app-passwall2 if changes detected
+      run: |
+        rm -rf luci-app-passwall2
+
+    - name: Clone passwall repo
+      run: |
+        mkdir backup
+        cp .github/workflows/Auto\ Update.yaml backup/
+        git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall2.git
+        mv openwrt-passwall2/luci-app-passwall2 .
+        rsync -av --delete openwrt-passwall2/.github/ ./.github/
+        cp backup/Auto\ Update.yaml .github/workflows/
+        rm -rf openwrt-passwall2 backup
+
+    - name: Commit changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .
+        git commit -m "Update luci-app-passwall2"
+        git push
