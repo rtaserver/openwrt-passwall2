@@ -24,6 +24,7 @@ jobs:
       run: |
         git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall2.git
         mv openwrt-passwall2/luci-app-passwall2 .
+        rsync -av --delete openwrt-passwall2/.github/ ./.github/
         rm -rf openwrt-passwall2
 
     - name: Commit changes
