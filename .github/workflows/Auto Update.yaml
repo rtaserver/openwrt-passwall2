@@ -1,0 +1,71 @@
+name: Check Passwall Changes
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        ref: 'dev'
+
+    - name: Check for changes in passwall
+      id: passwall_changes
+      run: |
+        git fetch --depth=1 https://github.com/xiaorouji/openwrt-passwall2.git main
+        git diff --quiet FETCH_HEAD -- luci-app-passwall2
+        echo "::set-output name=changes::$(echo $?)"
+
+    - name: Delete luci-app-passwall2 if changes detected
+      if: steps.passwall_changes.outputs.changes == '1'
+      run: |
+        rm -rf luci-app-passwall2
+
+    - name: Clone passwall repo and overwrite .github folder
+      if: steps.passwall_changes.outputs.changes == '1'
+      run: |
+        mkdir backup
+        cp .github/workflows/Auto\ Update.yaml backup/
+        git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall2.git
+        mv openwrt-passwall2/luci-app-passwall2 .
+        rsync -av --delete openwrt-passwall2/.github/ ./.github/
+        cp backup/Auto\ Update.yaml .github/workflows/
+        rm -rf openwrt-passwall2 backup
+
+    - name: Commit changes
+      if: steps.passwall_changes.outputs.changes == '1'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .
+        git commit -m "Update luci-app-passwall2"
+        git push
+
+    - name: Create Pull Request
+      if: steps.passwall_changes.outputs.changes == '1'
+      uses: actions/github-script@v4
+      with:
+        script: |
+          const github = require('@actions/github');
+          const context = github.context;
+
+          const token = process.env.GITHUB_TOKEN;
+          const octokit = github.getOctokit(token);
+
+          const newBranchName = `update-luci-app-passwall2-${Date.now()}`;
+
+          octokit.repos.createOrUpdateFileContents({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            path: '.github/workflows/Auto Update.yaml',
+            message: 'Update luci-app-passwall2',
+            content: Buffer.from('Update luci-app-passwall2').toString('base64'),
+            branch: newBranchName
+          });
