@@ -19,7 +19,7 @@ jobs:
     - name: Check for changes in passwall
       id: passwall_changes
       run: |
-        git fetch --depth=1 https://github.com/xiaorouji/openwrt-passwall2.git dev
+        git fetch --depth=1 https://github.com/xiaorouji/openwrt-passwall2.git main
         git diff --quiet FETCH_HEAD -- luci-app-passwall2
         echo "::set-output name=changes::$(echo $?)"
 
