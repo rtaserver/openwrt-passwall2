@@ -3,7 +3,6 @@ name: Check Passwall Changes
 on:
   schedule:
     - cron: "0 0 * * *"
-  watch: 
   push:
     branches:
       - dev
