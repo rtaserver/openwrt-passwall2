@@ -1,6 +1,8 @@
 name: Check Passwall Changes
 
 on:
+  schedule:
+    - cron: "0 0 * * *"
   push:
     branches:
       - dev
@@ -40,24 +42,9 @@ jobs:
       with:
        commit_message: "🎉 Sync: ${{ env.BUILDTIME }}"
 
-    - name: Create Pull Request
+    - name: pull-request-action
       if: steps.auto-commit-action.outputs.changes_detected == 'true'
-      uses: actions/github-script@v4
-      with:
-        script: |
-          const github = require('@actions/github');
-          const context = github.context;
-
-          const token = process.env.GITHUB_TOKEN;
-          const octokit = github.getOctokit(token);
-
-          const newBranchName = `update-luci-app-passwall2-${Date.now()}`;
-
-          octokit.repos.createOrUpdateFileContents({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            path: '.github/workflows/Auto Update.yaml',
-            message: 'Update luci-app-passwall2',
-            content: Buffer.from('Update luci-app-passwall2').toString('base64'),
-            branch: newBranchName
-          });
+      uses: vsoch/pull-request-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PULL_REQUEST_BRANCH: "main"
